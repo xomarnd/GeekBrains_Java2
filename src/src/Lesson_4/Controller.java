@@ -51,6 +51,7 @@ public class Controller {
         });
 
         clearChar.setOnAction(event -> {
+            allChatMessage.setText("");
             System.out.println("отчистить тело чата");
         });
 
