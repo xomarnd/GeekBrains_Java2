@@ -18,6 +18,7 @@ public class ClientHandler {
     private MainServer serv;
     private String clientName;
     private boolean authOk = false;
+    private String nick = null;
     public static final int TIMEOUT = 20 * 1000;
     public static int TRY = 5;
 
@@ -33,7 +34,7 @@ public class ClientHandler {
 
             new Thread (() -> {
                 try {
-                    while (authOk == false) {
+                    while (!authOk) {
                         authentication ();
                     }
                     readMessages ();
@@ -88,12 +89,12 @@ public class ClientHandler {
     public class PeriodicChecker extends Thread{
         @Override
         public void run(){
-            for(int i = (int) TIMEOUT/1000; i >= 0; i--) {
-                if(i%5==0) {
+            for (int i = (int) TIMEOUT / 1000; i >= 0; i--) {
+                if (i % 5 == 0 & !authOk & nick == null) {
                     sendMsg ("***Осталось: " + ((i > 4) ? i + " секунд" : (i > 1) ? i + " секунды" : (i == 1) ? i + " секунда" : "0, истекло время ожидания аутентификации!"));
                 }
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep (1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace ();
                 }
@@ -105,9 +106,11 @@ public class ClientHandler {
     private void authentication() throws IOException {
         String clientMessage = in.readUTF();
         sendMsg ("***Необходима аутентификация, введие логин и пароль \"/auth login pass\"");
-        Thread t = new PeriodicChecker();
-        t.start();
-        //https://docs.oracle.com/javase/1.5.0/docs/guide/lang/Countdown.java
+        if (nick == null) {
+            Thread t = new PeriodicChecker ();
+            t.start ();
+        }
+        // https://docs.oracle.com/javase/1.5.0/docs/guide/lang/Countdown.java
         Timer timeoutTimer = new Timer(true);
         timeoutTimer.schedule(new TimerTask () {
             @Override
@@ -130,7 +133,7 @@ public class ClientHandler {
             String password = loginAndPasswords[2];
             sendMsg ("***Попытка аутентификации: " + login);
 
-            String nick = MainServer.getAuthService ().getNickByLoginPass (login, password);
+            nick = MainServer.getAuthService ().getNickByLoginPass (login, password);
             if (nick == null) {
                 TRY -= 1;
                 if (TRY > 0 ) sendMsg ("***Неверные логин/пароль, осталось " + TRY + " попыток.");
@@ -148,6 +151,8 @@ public class ClientHandler {
             authOk = true;
             sendMsg ("***Аутентификация прошла успешно для - " + nick);
             clientName = nick;
+            sendMsg ("/authok" + clientName);
+
             MainServer.broadcastMsg ("***" + clientName + " теперь онлайн!");
             MainServer.subscribe(this);
         }

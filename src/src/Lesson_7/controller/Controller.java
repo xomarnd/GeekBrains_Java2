@@ -4,17 +4,22 @@ import java.io.*;
 import java.net.Inet4Address;
 import java.net.Socket;
 import java.net.URL;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.ResourceBundle;
 import java.util.Vector;
 
 import Lesson_7.server.ClientHandler;
 import Lesson_7.server.MainServer;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
+import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
@@ -58,14 +63,14 @@ public class Controller implements Initializable {
 
     String IP_ADDRESS = "localhost";
     int PORT = 8189;
-    String Nickname = "Nickname";
+    String Nickname = null;
     boolean connected = false;
 
     int serverPort = 8189;
 
     @FXML
     public void initialize(URL location, ResourceBundle resources) {
-        allChatMessage.appendText ("***Для подключения к серверу, используйте команду \"/server ip:port\". \n" +
+        toAllChatMessage ("***Для подключения к серверу, используйте команду \"/server ip:port\". \n" +
                 "***Для создания сервера, используйте команду \"/newserver port\".\n" +
                 "***Чтобы изменить Имя, используйте команду \"/nickname Имя\".\n" +
                 "***Для отправки приватного сообщение, используйте команду \" /w Имя Сообщение\".\n\n"
@@ -156,7 +161,7 @@ public class Controller implements Initializable {
                 if (connected) {
                     out.writeUTF (Nickname + " сменил имя на \"" + changeName + "\"");
                 } else {
-                    allChatMessage.appendText ("Вы сменили имя на \"" + changeName + "\"\n");
+                    toAllChatMessage ("Вы сменили имя на \"" + changeName + "\"\n");
                 }
                 Nickname = inputText.replaceAll ("/nickname ", "");
                 messegeEntryField.clear ();
@@ -200,7 +205,7 @@ public class Controller implements Initializable {
                 serverPort = Integer.parseInt (inputText.replaceAll ("/newserver ", ""));
                 messegeEntryField.clear ();
                 messegeEntryField.requestFocus ();
-                allChatMessage.appendText ("Сервер доступен по адресу " + Inet4Address.getLocalHost ().getHostAddress () + ":" + serverPort + ".\n");
+                toAllChatMessage ("Сервер доступен по адресу " + Inet4Address.getLocalHost ().getHostAddress () + ":" + serverPort + ".\n");
                 Thread threadServer = new Thread (() -> this.createServer (serverPort));
                 threadServer.start ();
                 connectToServer ("localhost", serverPort);
@@ -211,10 +216,11 @@ public class Controller implements Initializable {
                     if (connected) {
                         out.writeUTF (messegeEntryField.getText ());
                         System.out.println ("сообщение отправленно");
+                        saveHistory (inputText);
                         messegeEntryField.clear ();
                         messegeEntryField.requestFocus ();
                     } else {
-                        allChatMessage.appendText ("Подключитесь к серверу \"/server IP:PORT\"\n");
+                        toAllChatMessage ("Подключитесь к серверу \"/server IP:PORT\"\n");
                         messegeEntryField.clear ();
                         messegeEntryField.requestFocus ();
                     }
@@ -222,6 +228,57 @@ public class Controller implements Initializable {
                     e.printStackTrace ();
                 }
             }
+        }
+    }
+    private void toAllChatMessage(String text){
+        saveHistory(text);
+        allChatMessage.appendText(text);
+        allChatMessage.deselect();
+    }
+    private void fileWithDirectoryAssurance() {
+        File dir = new File("./src/res");
+        if (!dir.exists()) dir.mkdirs();
+        new File("./src/res/log.txt");
+    }
+
+    private void saveHistory(String message) {
+        fileWithDirectoryAssurance();
+        try {
+            File chatHistory = new File("./src/res/log.txt");
+            if (!chatHistory.exists()) {
+                chatHistory.createNewFile();
+            }
+            FileWriter fileWriter = new FileWriter(chatHistory, true);
+            BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
+            System.out.println ("Схоронил: " + message);
+            bufferedWriter.write(message+"\n");
+            bufferedWriter.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void loadHistory() {
+        int lineCount = 100;
+
+        try {
+            FileReader fileReader = new FileReader("./src/res/log.txt");
+            BufferedReader bufferedReader = new BufferedReader(fileReader);
+            String line;
+            List<String> history = new LinkedList<> ();
+            while ((line = bufferedReader.readLine()) != null) {
+                history.add(line + '\n');
+            }
+            bufferedReader.close();
+            int numberLinesHistory;
+            if (history.size() >= lineCount) numberLinesHistory = history.size() - 1 - lineCount;
+            else numberLinesHistory = 0;
+            for (int i = numberLinesHistory; i < history.size();  i++) {
+                if (history.size() != 0)
+                    allChatMessage.appendText(history.get(i));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -235,7 +292,7 @@ public class Controller implements Initializable {
 
         while (!connected) {
             System.out.println ("Переподключение сокета.");
-            allChatMessage.appendText ("Попытка подключения к серверу\n");
+            toAllChatMessage ("Попытка подключения к серверу\n");
             try {
                 socket.close ();
             } catch (Exception e) {
@@ -252,12 +309,15 @@ public class Controller implements Initializable {
                     @Override
                     public void run() {
                         try {
-                            allChatMessage.appendText ("Успешное подключение!\n");
-                            allChatMessage.appendText ("*****Добро пожадловать на сервер " + IP_ADDRESS + ":" + PORT + "!*****\n");
+                            toAllChatMessage ("Успешное подключение!\n");
+                            toAllChatMessage ("*****Добро пожадловать на сервер " + IP_ADDRESS + ":" + PORT + "!*****\n");
                             while (true) {
-
                                 String str = in.readUTF ();
-                                allChatMessage.appendText (str + "\n");
+                                if (str.startsWith("/authok")) {
+                                    loadHistory();
+                                } else {
+                                    toAllChatMessage (str + "\n");
+                                }
                             }
                         } catch (IOException e) {
                             if (connected) {
@@ -274,12 +334,12 @@ public class Controller implements Initializable {
                 }).start ();
             } catch (IOException ex) {
                 connected = false;
-                allChatMessage.appendText ("Невозможно подключиться к сокету.\n");
+                toAllChatMessage ("Невозможно подключиться к сокету.\n");
                 System.out.println ("Невозможно подключиться к сокету " + IP_ADDRESS);
                 count++;
             }
             if (count >= 5) {
-                allChatMessage.appendText ("Превышенно колличество попыток " + count + ", проверьте адрес. \n");
+                toAllChatMessage ("Превышенно колличество попыток " + count + ", проверьте адрес. \n");
                 break;
             }
 
